@@ -77,13 +77,16 @@ def autenticacion_admin():
                     st.session_state.awaiting_2fa = True
                     st.session_state.tfa_time = datetime.now()
                     st.success(f"✅ Código enviado a {email[:3]}***@...")
+                    # 🚫 NO HACER RERUN AQUÍ. Deja que el usuario ingrese el código.
                 else:
                     st.error("❌ Falló el envío del código.")
             else:
                 st.error("❌ Usuario o contraseña incorrectos.")
     else:
+        # ✅ MOSTRAR EL CAMPO PARA INGRESAR EL CÓDIGO
         st.subheader("🔐 Verificación en Dos Pasos")
-        code_input = st.text_input("Código de 6 dígitos", max_chars=6)
+        st.info(f"Se ha enviado un código de 6 dígitos a {st.secrets['admin']['email']}")
+        code_input = st.text_input("Ingresa el código de 6 dígitos", max_chars=6, type="password")
         if st.button("Verificar"):
             if (datetime.now() - st.session_state.tfa_time).total_seconds() > 600:
                 st.error("❌ Código expirado. Inicia sesión nuevamente.")
@@ -96,6 +99,10 @@ def autenticacion_admin():
                 st.error("❌ Código incorrecto.")
 
     return False
+
+
+
+
 
 # ==============================
 # GOOGLE SHEETS: CARGA DE CORREOS
