@@ -418,8 +418,8 @@ def process_file(uploaded_file, date_uploaded):
 # ==============================
 # APP PRINCIPAL
 # ==============================
-st.set_page_config(page_title="Sistema PAES - Administrador", layout="wide")
-st.title("📊 Sistema de Registro y Reporte de Resultados PAES")
+st.set_page_config(page_title="Sistema PAES - Administrador", layout="wide", page_icon="logo.gif")
+st.image("logo.gif", width=200)
 
 # Verificar secrets
 if not verificar_secrets():
