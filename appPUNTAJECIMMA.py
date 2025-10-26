@@ -11,11 +11,13 @@ from email.mime.multipart import MIMEMultipart
 from email.utils import formatdate
 import gspread
 from google.oauth2.service_account import Credentials
+import pytz  # Added for get_chile_time()
 
 # ==============================
 # CONFIGURACIÓN DE SECRETS
 # ==============================
 def verificar_secrets():
+    """Verifica que las secciones necesarias estén en secrets.toml."""
     required = ["google", "EMAIL", "admin"]
     for r in required:
         if r not in st.secrets:
@@ -38,6 +40,7 @@ def validate_new_2fa_key(key):
 # ENVÍO DE CORREO 2FA
 # ==============================
 def send_2fa_email(to_email, code):
+    """Envía el código de verificación 2FA al correo del administrador."""
     try:
         msg = MIMEMultipart()
         msg["From"] = st.secrets["EMAIL"]["sender_email"]
@@ -107,7 +110,7 @@ def send_new_2fa_key_email(to_email, new_key):
 # AUTENTICACIÓN CON 2FA Y REGISTRO DE NUEVA CLAVE
 # ==============================
 def autenticacion_admin():
-    # Inicializar estados en session_state
+    """Maneja el proceso de autenticación con 2FA y registro de clave de doble seguridad."""
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
         st.session_state.awaiting_2fa = False
@@ -185,7 +188,6 @@ def autenticacion_admin():
             if st.button("✅ Verificar Código", use_container_width=True):
                 if (datetime.now() - st.session_state.tfa_time).total_seconds() > 600:
                     st.error("❌ Código expirado. Inicia sesión nuevamente.")
-                    # Resetear estado
                     st.session_state.awaiting_2fa = False
                     st.session_state.tfa_code = None
                     st.session_state.tfa_time = None
@@ -250,7 +252,6 @@ def autenticacion_admin():
                         email = st.secrets["admin"]["email"]
                         if send_new_2fa_key_email(email, new_2fa_key):
                             st.success(f"✅ Clave registrada y enviada a {email[:3]}***@...")
-                            # Guardar la clave en session_state para futuras verificaciones
                             st.session_state.admin_2fa_key = new_2fa_key
                             st.session_state.authenticated = True
                             st.session_state.awaiting_new_2fa_registration = False
@@ -272,36 +273,34 @@ def autenticacion_admin():
 # ==============================
 # GOOGLE SHEETS: CARGA DE CORREOS
 # ==============================
-
 @st.cache_resource
 def get_client():
+    """Autentica con Google Sheets usando credenciales de secrets.toml."""
     try:
-        # Verificar que los secrets estén disponibles
         if "google" not in st.secrets or "credentials" not in st.secrets["google"]:
             st.error("❌ No se encontraron las credenciales de Google en los secrets.")
             return None
-            
         creds_dict = json.loads(st.secrets["google"]["credentials"])
         creds = Credentials.from_service_account_info(creds_dict, scopes=[
-            "https://spreadsheets.google.com/feeds",
+            "https://www.googleapis.com/auth/spreadsheets",
             "https://www.googleapis.com/auth/drive"
         ])
         return gspread.authorize(creds)
     except (KeyError, json.JSONDecodeError) as e:
-        st.error(f"Error loading Google credentials: {e}")
+        st.error(f"❌ Error al cargar credenciales de Google: {e}")
         return None
 
 def get_chile_time():
+    """Obtiene la hora actual en zona horaria de Chile."""
     chile_tz = pytz.timezone("America/Santiago")
     return datetime.now(chile_tz)
 
-
-
-
 def load_guardian_emails():
-    """Carga el mapeo de ZipGrade ID a correo de apoderado desde la hoja 'PAESREPORTES'"""
+    """Carga el mapeo de ZipGrade ID a correo de apoderado desde la hoja 'PAESREPORTES'."""
     try:
-        client = get_gspread_client()
+        client = get_client()  # Usar get_client() en lugar de get_gspread_client()
+        if client is None:
+            return {}
         sheet = client.open_by_key(st.secrets["google"]["sheet_id"]).worksheet("PAESREPORTES")
         records = sheet.get_all_records()
         email_map = {}
@@ -321,6 +320,7 @@ def load_guardian_emails():
 # ENVÍO DE CORREO A APODERADOS
 # ==============================
 def send_result_email(to_email, student_name, results_df):
+    """Envía los resultados de los ensayos al correo del apoderado."""
     try:
         msg = MIMEMultipart("alternative")
         msg["From"] = st.secrets["EMAIL"]["sender_email"]
@@ -328,7 +328,6 @@ def send_result_email(to_email, student_name, results_df):
         msg["Subject"] = f"📊 Resultados PAES - {student_name}"
         msg["Date"] = formatdate(localtime=True)
 
-        # Construir cuerpo HTML
         rows = ""
         for _, row in results_df.iterrows():
             test = row.get("Test Type", "N/A")
@@ -364,7 +363,6 @@ def send_result_email(to_email, student_name, results_df):
         """
         msg.attach(MIMEText(html, "html"))
         
-        # Configuración SMTP mejorada
         server = smtplib.SMTP(st.secrets["EMAIL"]["smtp_server"], int(st.secrets["EMAIL"]["smtp_port"]))
         server.starttls()
         server.login(st.secrets["EMAIL"]["sender_email"], st.secrets["EMAIL"]["sender_password"])
@@ -379,15 +377,16 @@ def send_result_email(to_email, student_name, results_df):
 # LÓGICA DE PUNTAJES PAES
 # ==============================
 SCORE_RANGES = {
-    "CLE8": {0:150,10:200,20:300,30:400,40:500,50:600,60:700},
-    "M1E8": {0:150,10:200,20:300,30:400,40:500,50:600,60:700,65:750},
-    "M2E8": {0:150,10:200,20:300,30:400,40:500,50:600,60:700,65:750},
-    "CFE8": {0:150,10:200,20:300,30:400,40:500,50:600,60:700},
-    "CBE8": {0:150,10:200,20:300,30:400,40:500,50:600,60:700},
-    "CQE8": {0:150,10:200,20:300,30:400,40:500,50:600,60:700},
+    "CLE8": {0:150, 10:200, 20:300, 30:400, 40:500, 50:600, 60:700},
+    "M1E8": {0:150, 10:200, 20:300, 30:400, 40:500, 50:600, 60:700, 65:750},
+    "M2E8": {0:150, 10:200, 20:300, 30:400, 40:500, 50:600, 60:700, 65:750},
+    "CFE8": {0:150, 10:200, 20:300, 30:400, 40:500, 50:600, 60:700},
+    "CBE8": {0:150, 10:200, 20:300, 30:400, 40:500, 50:600, 60:700},
+    "CQE8": {0:150, 10:200, 20:300, 30:400, 40:500, 50:600, 60:700},
 }
 
 def get_paes_score(correct, test_type):
+    """Calcula el puntaje PAES basado en el número de respuestas correctas."""
     if test_type not in SCORE_RANGES:
         return None
     ranges = SCORE_RANGES[test_type]
@@ -398,6 +397,7 @@ def get_paes_score(correct, test_type):
     return ranges[keys[-1]] if correct >= keys[-1] else ranges[keys[0]]
 
 def process_file(uploaded_file, date_uploaded):
+    """Procesa un archivo CSV de ZipGrade y calcula puntajes PAES."""
     try:
         df = pd.read_csv(uploaded_file)
         quiz_name = df['Quiz Name'].iloc[0] if 'Quiz Name' in df.columns else ""
@@ -410,7 +410,7 @@ def process_file(uploaded_file, date_uploaded):
         required = ['ZipGrade ID', 'First Name', 'Last Name']
         for col in required:
             if col not in df.columns:
-                st.error(f"Falta columna '{col}' en {uploaded_file.name}")
+                st.error(f"❌ Falta columna '{col}' en {uploaded_file.name}")
                 return None, None
 
         q_cols = [c for c in df.columns if c.startswith('Q') and c[1:].isdigit()]
@@ -421,14 +421,15 @@ def process_file(uploaded_file, date_uploaded):
 
         return df[['ZipGrade ID', 'First Name', 'Last Name', 'Total Correct', 'PAES Score', 'Test Type', 'Date Uploaded']], test_type
     except Exception as e:
-        st.error(f"Error procesando {uploaded_file.name}: {e}")
+        st.error(f"❌ Error procesando {uploaded_file.name}: {e}")
         return None, None
 
 # ==============================
 # APP PRINCIPAL
 # ==============================
 st.set_page_config(page_title="Sistema PAES - Administrador", layout="wide", page_icon="logo.gif")
-st.image("logo.png", width=200)
+st.image("logo.gif", width=200)
+st.title("📊 Sistema de Registro y Reporte de Resultados PAES")
 
 # Verificar secrets
 if not verificar_secrets():
@@ -441,7 +442,7 @@ if not autenticacion_admin():
 
 # Mostrar información de autenticación exitosa
 st.success(f"✅ Bienvenido, {st.secrets['admin']['username']}!")
-st.info(f"🔐 Estado de seguridad: {'🛡️️ Con clave de doble seguridad' if st.session_state.get('admin_2fa_key') else '⚠️ Sin clave de doble seguridad'}")
+st.info(f"🔐 Estado de seguridad: {'🛡️ Con clave de doble seguridad' if st.session_state.get('admin_2fa_key') else '⚠️ Sin clave de doble seguridad'}")
 
 # Botón para cerrar sesión
 if st.button("🚪 Cerrar Sesión"):
@@ -593,7 +594,6 @@ if st.button("🚀 Procesar y Enviar Resultados", type="primary", disabled=not u
         )
     
     with col_download2:
-        # Descarga solo estudiantes sin correo
         if len(students_without_email) > 0:
             no_email_csv = students_without_email[['ZipGrade ID', 'First Name', 'Last Name', 'Test Type', 'Total Correct', 'PAES Score', 'Date Uploaded']].drop_duplicates()
             no_email_data = no_email_csv.to_csv(index=False).encode('utf-8')
