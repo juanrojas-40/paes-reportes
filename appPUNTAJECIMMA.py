@@ -272,25 +272,28 @@ def autenticacion_admin():
 # ==============================
 # GOOGLE SHEETS: CARGA DE CORREOS
 # ==============================
+
 @st.cache_resource
-@st.cache_resource
-def get_gspread_client():
-    # Usar credentials.json directamente para pruebas locales
-    import os
-    if os.path.exists("credentials.json"):
-        creds_dict = json.load(open("credentials.json"))
-    else:
-        google_creds = st.secrets["google"]
-        if "credentials" in google_creds:
-            creds_dict = json.loads(google_creds["credentials"])
-        else:
-            creds_dict = google_creds
-    
-    creds = Credentials.from_service_account_info(creds_dict, scopes=[
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive"
-    ])
-    return gspread.authorize(creds)
+def get_client():
+    try:
+        # Verificar que los secrets estén disponibles
+        if "google" not in st.secrets or "credentials" not in st.secrets["google"]:
+            st.error("❌ No se encontraron las credenciales de Google en los secrets.")
+            return None
+            
+        creds_dict = json.loads(st.secrets["google"]["credentials"])
+        creds = Credentials.from_service_account_info(creds_dict, scopes=[
+            "https://spreadsheets.google.com/feeds",
+            "https://www.googleapis.com/auth/drive"
+        ])
+        return gspread.authorize(creds)
+    except (KeyError, json.JSONDecodeError) as e:
+        st.error(f"Error loading Google credentials: {e}")
+        return None
+
+def get_chile_time():
+    chile_tz = pytz.timezone("America/Santiago")
+    return datetime.now(chile_tz)
 
 
 
