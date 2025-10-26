@@ -273,21 +273,27 @@ def autenticacion_admin():
 # GOOGLE SHEETS: CARGA DE CORREOS
 # ==============================
 @st.cache_resource
+@st.cache_resource
 def get_gspread_client():
-    # Manejar tanto string JSON como dict
-    google_creds = st.secrets["google"]
-    if "credentials" in google_creds:
-        # Si es string JSON
-        creds_dict = json.loads(google_creds["credentials"])
+    # Usar credentials.json directamente para pruebas locales
+    import os
+    if os.path.exists("credentials.json"):
+        creds_dict = json.load(open("credentials.json"))
     else:
-        # Si ya es un dict en los secrets
-        creds_dict = google_creds
+        google_creds = st.secrets["google"]
+        if "credentials" in google_creds:
+            creds_dict = json.loads(google_creds["credentials"])
+        else:
+            creds_dict = google_creds
     
     creds = Credentials.from_service_account_info(creds_dict, scopes=[
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive"
     ])
     return gspread.authorize(creds)
+
+
+
 
 def load_guardian_emails():
     """Carga el mapeo de ZipGrade ID a correo de apoderado desde la hoja 'PAESREPORTES'"""
